@@ -1,118 +1,72 @@
-#https://www.youtube.com/watch?v=v68zYyaEmEA
-#crane is best
-#OLD NEWS salet is new best crate closely following
-#soare is my FAV
 import json
-known = {}
-pos = list("qwertyuiopasdfghjklzxcvbnm")
-yellow_charecters = {}
 
-class ValidWordException(Exception):
-    def __init__(self, message='ValidWord'):
-        super(ValidWordException, self).__init__(message)
+def load_words(file_path):
+    with open(file_path, 'r') as file:
+        words = json.load(file)
+    return words
 
-def make_guess():
-    global known, pos, yellow_charecters
-    guesses = []
-    (pos1, pos2, pos3, pos4, pos5) = (pos.copy(), pos.copy(), pos.copy(), pos.copy(), pos.copy())
-    try:
-        pos1.remove(yellow_charecters[0])
-    except:
-        pass
-    try:
-        pos2.remove(yellow_charecters[1])
-    except:
-        pass
-    try:
-        pos3.remove(yellow_charecters[2])
-    except:
-        pass
-    try:
-        pos4.remove(yellow_charecters[3])
-    except:
-        pass
-    try:
-        pos5.remove(yellow_charecters[4])
-    except:
-        pass
+def filter_words(words, letters, green_letters, yellow_letters, grey_letters):
+    valid_words = []
 
-    for key, value in known.items():
-        if key == 0:
-            pos1 = list(value * len(pos))
-        if key == 1:
-            pos2 = list(value * len(pos))
-        if key == 2:
-            pos3 = list(value * len(pos))
-        if key == 3:
-            pos4 = list(value * len(pos))
-        if key == 4:
-            pos5 = list(value * len(pos))
-    done_precent = 0
-    for i1 in pos1:
-        for i2 in pos2:
-            for i3 in pos3:
-                for i4 in pos4:
-                    for i5 in pos5:
-                        guesses.append(i1+i2+i3+i4+i5)
-        done_precent += 100 / len(pos)
-        print(f"{int(done_precent)}% done making guesses table")
-    print("Created guesses table now removing duplicates")
-    pre_size = len(guesses)
-    guesses = list(set(guesses))
-    print("Removed duplicates")
-    print(f"shunk size by {pre_size / len(guesses) * 100}%")
-    pre_size = len(guesses)
-    if yellow_charecters != {}:
-        print("now removing words without yellow charecters")
-        yellow_guesses = []
-        [yellow_guesses.append(y) for y in guesses if all([x in y for x in yellow_charecters.values()])]
-        print("Removed choices invalidated due to not having yellow charecters")
-        print(f"shunk size by {pre_size / len(guesses) * 100}%")
-        guesses = yellow_guesses
-        print("Removing duplicates again")
-        pre_size = len(guesses)
-        guesses = list(set(guesses))
-        print("Removed duplicates")
-        print(f"shunk size by {pre_size / len(guesses) * 100}%")
-    print("now checking validity of words")
-    file = open("words_dictionary.json", "r")
-    word_list = json.loads(file.read())
-    valid_words_found = []
-    def valid_word_operations(arg):
-        nonlocal valid_words_found
-        valid_words_found.append(arg)
-        if len(set(arg)) == len(arg):
-            global guess_recomendation
-            guess_recomendation = arg
-            raise ValidWordException
-    guesses.sort()
-    for x in guesses:
-        [valid_word_operations(y) for y in word_list if x == y]
-    file.close()
-    return(valid_words_found[0])
+    # Just doing this here to reduce redundant work
+    green_indices = []
+    for green_index in green_letters.values():
+        green_indices.extend(green_index)
+    
+    for word in words:
+        if check_word(word, letters, green_letters, yellow_letters, grey_letters, green_indices):
+            valid_words.append(word)
+    return valid_words
 
-print("""Hi this a tool used to solve wordle puzzles
-I made myself cause I was tired,
-tired of being on my final guess looking through
-yes a literal dictionary tying to win
+def check_word(word, letters, green_letters, yellow_letters, grey_letters, green_indices=[]):
+    for letter in [word[letter_index] for letter_index in range(len(word)) if not letter_index in green_indices]: # Grey letters
+        if letter in grey_letters:
+            return False
+    for letter, indices in green_letters.items(): # Green letters
+        for index in indices:
+            if word[index] != letter:
+                return False
+    for letter in yellow_letters: # Yellow letters pt1
+        if not letter in word:
+            return False
+    for index, letter in enumerate(word): # Yellow letters pt2
+        if not index in letters[letter]:
+            return False
+    return True
 
-anyhow heres the actual program
-""")
-guess_recomendation = "salet"
-while True:
-    to_parse = list(input(f"Guess the word {guess_recomendation} now\n\nNow type the *last* letter of each resulting color from the guess below\nEX: \u001b[33mw\u001b[37myy\u001b[32mn\u001b[37my\n"))
-    for i in range(5):
-        char = guess_recomendation[i]
-        on_parse = to_parse[i]
-        if on_parse == "y":
-            pos.remove(char)
-        elif on_parse == "w":
-            yellow_charecters[i] = char
-        elif on_parse == "n":
-            known[i] = char
-        else:
-            raise Exception(f"Invalid charecter used in user input in column {i}")
-    try:
-        guess_recomendation = make_guess()
-    except ValidWordException: 
-        pass
+def main():
+    words = load_words('words_dictionary.json')
+    letters = {chr(i): [0,1,2,3,4] for i in range(ord('a'), ord('z')+1)}
+    green_letters = {chr(i): [] for i in range(ord('a'), ord('z')+1)}
+    yellow_letters = []
+    grey_letters = set()
+    #
+    #yellow_letters = ['t', 'e']
+    #letters['t'] = [0,1,2,4]
+    #letters['e'] = [0,1,2,3]
+    #grey_letters.add('c')
+    #grey_letters.add('r')
+    #grey_letters.add('a')
+    #print(check_word('motel', letters, green_letters, yellow_letters, grey_letters))
+    #
+    print("For your first guess, you can use any 5 letter word, crate is recommended!")
+    filtered_words = words
+    while True:
+        print("Please type in a word of your choice to use:")
+        print(filtered_words[:75])  # Print only top 75 words
+        user_word = input()
+        if user_word == '':
+            user_word = filtered_words[0]
+        colors = input("After inputing your word, type the *last* letter of each resulting color from the guess below\nEX: \u001b[33mw\u001b[37myy\u001b[32mn\u001b[37my\n")
+        for index, letter, color in zip(range(len(user_word)), user_word, colors):
+            if color == 'y': # Grey letters
+                grey_letters.add(letter)
+            elif color == 'w': # Yellow letters
+                letters[letter].remove(index)
+                yellow_letters.append(letter)
+            elif color == 'n':
+                green_letters[letter].append(index)
+        filtered_words = filter_words(words, letters, green_letters, yellow_letters, grey_letters)
+
+if __name__ == "__main__":
+    main()
