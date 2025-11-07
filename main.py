@@ -1,92 +1,137 @@
 import json
+import string
+from typing import Dict, List, Optional
 
-def load_words(file_path):
+
+def load_words(file_path: str) -> List[str]:
+    """Load a JSON list of words from ``file_path``."""
     with open(file_path, 'r') as file:
         words = json.load(file)
+
     return words
 
-def filter_words(words, letters, green_letters, yellow_letters, grey_letters):
-    valid_words = []
 
-    # Just doing this here to reduce redundant work
-    green_indices = []
-    for green_index in green_letters.values():
-        green_indices.extend(green_index)
-    
+def filter_words(words: List[str], letters: Dict[str, List[int]],
+                 green_letters: Dict[str, List[int]],
+                 yellow_letters: List[str], grey_letters: set) -> List[str]:
+    """Return words that satisfy the given positional and color constraints."""
+    green_indices = [i for indices in green_letters.values() for i in indices]
+
+    valid_words: List[str] = []
     for word in words:
-        if check_word(word, letters, green_letters, yellow_letters, grey_letters, green_indices):
+        if check_word(word, letters, green_letters, yellow_letters,
+                      grey_letters, green_indices):
             valid_words.append(word)
+
     return valid_words
 
-def check_word(word, letters, green_letters, yellow_letters, grey_letters, green_indices=[]):
-    for letter in [word[letter_index] for letter_index in range(len(word)) if not letter_index in green_indices]: # Grey letters
+
+def check_word(word: str, letters: Dict[str, List[int]],
+               green_letters: Dict[str, List[int]],
+               yellow_letters: List[str], grey_letters: set,
+               green_indices: Optional[List[int]] = None) -> bool:
+    """Return True if ``word`` matches the provided constraints.
+
+    ``green_indices`` should be a list of indices that are already
+    confirmed (green) and therefore excluded from grey-letter checks.
+    """
+    if green_indices is None:
+        green_indices = []
+
+    # Grey letters: none of the non-green positions may be in grey set
+    for letter in (word[i] for i in range(len(word)) if i not in green_indices):
         if letter in grey_letters:
             return False
-    for letter, indices in green_letters.items(): # Green letters
+
+    # Green letters: confirmed positions must match
+    for letter, indices in green_letters.items():
         for index in indices:
             if word[index] != letter:
                 return False
-    for letter in yellow_letters: # Yellow letters pt1
-        if not letter in word:
+
+    # Yellow letters: must appear somewhere in the word
+    for letter in yellow_letters:
+        if letter not in word:
             return False
-    for index, letter in enumerate(word): # Yellow letters pt2
-        if not index in letters[letter]:
+
+    # Position constraints per letter
+    for index, letter in enumerate(word):
+        if index not in letters[letter]:
             return False
+
     return True
 
-def postiton_proabilities(words):
-    out = [{chr(i): 0 for i in range(ord('a'), ord('z')+1)} for i in range(5)] # 5 letter words
+
+def position_probabilities(words: List[str]) -> List[Dict[str, float]]:
+    """Compute letter frequency per position for 5-letter words.
+
+    Returns a list of 5 dicts mapping letter -> probability.
+    """
+    positions = [{chr(i): 0.0 for i in range(ord('a'), ord('z') + 1)} for _ in range(5)]
+
     for word in words:
         for index, letter in enumerate(word):
-            out[index][letter] += 1
-    # Normalize
-    for position in out:
-        total = sum(position.values())
-        for letter in position:
-            position[letter] /= total
-    return out
+            positions[index][letter] += 1
 
-def main():
-    WORDS = load_words('words_dictionary.json')
-    letters = {chr(i): [0,1,2,3,4] for i in range(ord('a'), ord('z')+1)} # 5 letter words
-    green_letters = {chr(i): [] for i in range(ord('a'), ord('z')+1)}
-    yellow_letters = []
+    # Normalize to probabilities (guard divide-by-zero)
+    for position in positions:
+        total = sum(position.values())
+        if total:
+            for letter in position:
+                position[letter] /= total
+
+    return positions
+
+
+def main() -> None:
+    words = load_words('words_dictionary.json')
+
+    letters = {chr(i): [0, 1, 2, 3, 4] for i in range(ord('a'), ord('z') + 1)}
+    green_letters = {chr(i): [] for i in range(ord('a'), ord('z') + 1)}
+    yellow_letters: List[str] = []
     grey_letters = set()
-    #
-    #yellow_letters = ['t', 'e']
-    #letters['t'] = [0,1,2,4]
-    #letters['e'] = [0,1,2,3]
-    #grey_letters.add('c')
-    #grey_letters.add('r')
-    #grey_letters.add('a')
-    #print(check_word('motel', letters, green_letters, yellow_letters, grey_letters))
-    #
-    print("For your first guess, you can use any 5 letter word, crate is recommended!")
-    filtered_words = WORDS.copy()
+
+    filtered_words = words.copy()
+
     while True:
-        print("Please type in a word of your choice to use:")
-        Position_probabilities = postiton_proabilities(filtered_words)
-        # Reorder filtered words based on letter position probabilities, word commonness, and wether it has repeated letters
-        # Propably should evetually adjust weights
-        filtered_words = sorted(filtered_words[:1000], key=lambda word: ( # Limit to top 1000 to speed up sorting
-            sum(Position_probabilities[index][letter] for index, letter in enumerate(word)) + # Letter position probabilities
-            -(filtered_words.index(word) / len(filtered_words)) + # Word commonness (earlier in list is more common)
-            len(set(word)) / 5 # Fewer repeated letters
-        ), reverse=True)
-        print(filtered_words[:75])  # Print only top 75 words
-        user_word = input()
-        if user_word == '':
+        print('Please type in a word of your choice to use:', end=' ')
+        pos_probs = position_probabilities(filtered_words)
+
+        # Reorder filtered words based on letter-position probabilities,
+        # word commonness (earlier in list is more common), and fewer
+        # repeated letters. Limit to top 1000 to speed up sorting.
+
+        def score(word: str) -> float:
+            return (
+                sum(pos_probs[i][ch] for i, ch in enumerate(word))
+                - (filtered_words.index(word) / len(filtered_words))
+                + (len(set(word)) / 5)
+            )
+
+        filtered_words = sorted(filtered_words[:1000], key=score, reverse=True)
+
+        print(filtered_words[:75])
+
+        user_word = input().strip()
+        if not user_word:
             user_word = filtered_words[0]
-        colors = input("After inputing your word, type the *last* letter of each resulting color from the guess below\nEX: \u001b[33mw\u001b[37myy\u001b[32mn\u001b[37my\n")
+
+        colors = input(
+            'After inputing your word, type the *last* letter of each '
+            'resulting color from the guess below\nEX: \u001b[33mw\u001b[37myy\u001b[32mn\u001b[37my\n'
+        )
+
         for index, letter, color in zip(range(len(user_word)), user_word, colors):
-            if color == 'y': # Grey letters
+            if color == 'y':  # Grey letters
                 grey_letters.add(letter)
-            elif color == 'w': # Yellow letters
+            elif color == 'w':  # Yellow letters
                 letters[letter].remove(index)
                 yellow_letters.append(letter)
             elif color == 'n':
                 green_letters[letter].append(index)
-        filtered_words = filter_words(WORDS, letters, green_letters, yellow_letters, grey_letters)
 
-if __name__ == "__main__":
+        filtered_words = filter_words(words, letters, green_letters, yellow_letters, grey_letters)
+
+
+if __name__ == '__main__':
     main()
