@@ -121,14 +121,20 @@ def main() -> None:
             'resulting color from the guess below\nEX: \u001b[33mw\u001b[37myy\u001b[32mn\u001b[37my\n'
         )
 
+        # We do yellow -> green -> grey to solve double-letter issues
         for index, letter, color in zip(range(len(user_word)), user_word, colors):
-            if color == 'y':  # Grey letters
-                grey_letters.add(letter)
-            elif color == 'w':  # Yellow letters
+            if color == 'w':  # Yellow letters
                 letters[letter].remove(index)
                 yellow_letters.append(letter)
-            elif color == 'n':
+        for index, letter, color in zip(range(len(user_word)), user_word, colors):
+            if color == 'n':
                 green_letters[letter].append(index)
+        for index, letter, color in zip(range(len(user_word)), user_word, colors):
+            if color == 'y':  # Grey letters
+                letters[letter].remove(index)
+                if letter in yellow_letters or green_letters[letter] != []:
+                    continue # Could do some stuff to limit to 1 instance of a letter but~
+                grey_letters.add(letter)
 
         filtered_words = filter_words(words, letters, green_letters, yellow_letters, grey_letters)
 
